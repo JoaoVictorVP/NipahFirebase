@@ -6,5 +6,8 @@
 [AttributeUsage(AttributeTargets.Class|AttributeTargets.Struct)]
 public class FirebaseAttribute : Attribute
 {
+    public string DefaultPath;
 
+    public FirebaseAttribute() => DefaultPath = null;
+    public FirebaseAttribute(string defaultPath) => DefaultPath = defaultPath;
 }
