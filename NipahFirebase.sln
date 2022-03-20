@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.1.32203.90
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FirebaseCore", "FirebaseCore\FirebaseCore.csproj", "{08257A0C-9F13-40EB-83CC-5FF9B0A8869F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FirebaseCore", "FirebaseCore\FirebaseCore.csproj", "{08257A0C-9F13-40EB-83CC-5FF9B0A8869F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NipahFirebase.SourceGenerator", "NipahFirebase.SourceGenerator\NipahFirebase.SourceGenerator.csproj", "{0E89DB61-75C3-4DF7-8BB8-7B11FC1E6B95}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{08257A0C-9F13-40EB-83CC-5FF9B0A8869F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{08257A0C-9F13-40EB-83CC-5FF9B0A8869F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{08257A0C-9F13-40EB-83CC-5FF9B0A8869F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E89DB61-75C3-4DF7-8BB8-7B11FC1E6B95}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E89DB61-75C3-4DF7-8BB8-7B11FC1E6B95}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E89DB61-75C3-4DF7-8BB8-7B11FC1E6B95}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E89DB61-75C3-4DF7-8BB8-7B11FC1E6B95}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
