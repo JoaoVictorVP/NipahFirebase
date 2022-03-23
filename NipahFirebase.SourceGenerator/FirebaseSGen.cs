@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -20,7 +21,8 @@ public class FirebaseSGen : NipahSourceGenerator
     const string PrimitiveFirebaseAttribute = "Firebase",
         FirebaseAttribute = "FirebaseAttribute",
         IgnoreAttribute = "IgnoreAttribute",
-        IndexedAttribute = "IndexedAttribute";//,
+        IndexedAttribute = "IndexedAttribute",
+        ShallowAttribute = nameof(ShallowAttribute);//,
         //ShallowAttribute = "Shallow";
 
     public override void Initialize(IncrementalGeneratorInitializationContext context)
@@ -154,12 +156,12 @@ public class FirebaseSGen : NipahSourceGenerator
                 if(dat.IsShallow)
                 {
                     // value.Save(path) /// path + "/Deep/" + dat.Name
-                    m.InvokeAsync($"{dat.Name}.Save", Value.StringConcat(pathParam, "/Deep/", Value.Source(dat.Name) ));
+                    m.InvokeAsync($"{dat.Name}.Save", Value.StringConcat(pathParam, "/Deep/", dat.Name ));
                 }
                 else
                 {
                     // Database.Set(value, path) /// path + "Shallow/" + dat.Name
-                    m.InvokeAsync(DBSet, dat.Name, Value.StringConcat(pathParam, "/Shallow/", Value.Source(dat.Name) ));
+                    m.InvokeAsync(DBSet, Value.Source(dat.Name), Value.StringConcat(pathParam, "/Shallow/", dat.Name ));
                 }
             }
         }
@@ -195,19 +197,19 @@ public class FirebaseSGen : NipahSourceGenerator
                             // path + "/Deep/"
                             (pathParam, "/Deep/", 
                             // + load.variable
-                            Value.Source("load." + dat.Name)) );
+                            dat.Name) );
                     }
                     else
                     {
                         // load.variable = await type.Load(path);
                         m.Bind($"load.{dat.Name}",
-                            new InvokeBuilder($"{dat.Type.FullName}.Load", false, Value.StringConcat(pathParam, "/Deep/", Value.Source("load." + dat.Name))).Await());
+                            new InvokeBuilder($"{dat.Type.FullName}.Load", false, Value.StringConcat(pathParam, "/Deep/", dat.Name)).Await());
                     }
                 }
                 else
                 {
                     // load.variable = await Database.Get<type>(value, path) /// path + "Shallow/" + dat.Name
-                    m.Invoke(DBGet.Replace("{VAR}", dat.Name).Replace("{TYPE}", dat.Type.FullName), Value.StringConcat(pathParam, "/Shallow/", Value.Source("load." + dat.Name)));
+                    m.Invoke(DBGet.Replace("{VAR}", dat.Name).Replace("{TYPE}", dat.Type.FullName), Value.StringConcat(pathParam, "/Shallow/", dat.Name));
                 }
             }
         }
@@ -244,10 +246,63 @@ public class FirebaseSGen : NipahSourceGenerator
                 {
                     dat.Name = field.Name;
                     dat.Type = field.Type.AsRef();
-                    dat.IsShallow = sources.Any((val) => val.type.Name == field.Type.Name);
+                    dat.IsShallow = false;
+                    dat.PrimitiveShallow = false;
+                    dat.PrimitiveShallowName = null;
                     //dat.Type = fields.Declaration.Type;
 
                     return dat;
+                }
+                else if(member is IPropertySymbol {IsIndexer: false } prop)
+                {
+                    dat.Name = prop.Name;
+                    dat.Type = prop.Type.AsRef();
+                    dat.IsShallow = false;
+                    dat.PrimitiveShallow = false;
+                    dat.PrimitiveShallowName = null;
+
+                    return dat;
+                }
+            }
+            else if(member.DeclaredAccessibility is Accessibility.Private)
+            {
+                string formatName(string name)
+                {
+                    if (name is null or "" or "_") return "SAMPLE";
+                    if (name[0] is '_')
+                        name = name.Remove(0, 1);
+                    if(char.IsLower(name[0]))
+                        name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name);
+                    return name;
+                }
+
+                MemberData dat;
+
+                var field = member switch
+                {
+                    IFieldSymbol f => f.AsRef(),
+                    IPropertySymbol p => p.AsRef(),
+                    _ => default
+                };
+
+                if(field.IsNull is false)
+                {
+                    if (!sources.Any((val) => val.type.Name == field.Type.Name))
+                    {
+                        if (HasAttribute(field, ShallowAttribute, out var deep))
+                        {
+                            dat.IsShallow = true;
+                            dat.PrimitiveShallow = true;
+                        }
+                        else
+                            return default;
+                    }
+                    else
+                        dat.IsShallow = true;
+
+                    dat.Name = field.Name;
+                    dat.Type = field.Type;
+                    dat.PrimitiveShallowName = formatName(dat.Name);
                 }
             }
         }
@@ -256,6 +311,24 @@ public class FirebaseSGen : NipahSourceGenerator
     static bool HasAttribute(ISymbol member, string attributeName, out AttributeData attr)
     {
         if (member.GetAttributes() is ImmutableArray<AttributeData> { Length: > 0} attributes)
+        {
+            foreach (var nattr in attributes)
+            {
+                string name = nattr.AttributeClass.Name;
+                // TODO: Check if Attribute is auto added when using semantics
+                if (name == attributeName || name == attributeName + "Attribute")
+                {
+                    attr = nattr;
+                    return true;
+                }
+            }
+        }
+        attr = null;
+        return false;
+    }
+    static bool HasAttribute(GFieldRef member, string attributeName, out AttributeData attr)
+    {
+        if (member.NGetAttributes() is ImmutableArray<AttributeData> { Length: > 0 } attributes)
         {
             foreach (var nattr in attributes)
             {
@@ -281,6 +354,8 @@ public class FirebaseSGen : NipahSourceGenerator
         public string Name;
         public GTypeRef Type;
         public bool IsShallow;
+        public bool PrimitiveShallow;
+        public string PrimitiveShallowName;
     }
 }
 public static class FastLinq

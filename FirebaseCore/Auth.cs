@@ -51,7 +51,12 @@ public static class Auth
         return Convert.ToHexString(hash);
     }
 
-    public static async void SignIn(string email, string password)
+    public static async Task SignInAnonymously()
+    {
+        await Client.SignInAnonymouslyAsync();
+    }
+
+    public static async Task SignIn(string email, string password)
     {
         await Client.SignInWithEmailAndPasswordAsync(email, password);
     }
