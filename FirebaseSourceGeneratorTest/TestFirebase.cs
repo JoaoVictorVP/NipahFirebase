@@ -28,9 +28,9 @@ public class TestFirebase
                 Value = new NowWithStruct
                 {
                     Money = 305.908604954389m
-                }
-            }
-        };
+                }.AsValueTask()
+            }.AsValueTask()
+        };simple.SetDatabasePath("");
         await simple.Save();
 
         Assert.IsNotNull(await Database.Client.Child("Iza eu te amo!").OnceAsync<object>(), "Boo null return!");

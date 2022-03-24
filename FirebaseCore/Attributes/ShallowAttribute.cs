@@ -7,6 +7,7 @@
 public class ShallowAttribute : Attribute
 {
     public string? Name;
+    public bool AutoSave;
 
     /// <summary>
     /// This field or property should be marked as shallow and the generated property should be named as it is without initial _ (if has) and with first letter capitalization

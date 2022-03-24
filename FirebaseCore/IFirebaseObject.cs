@@ -10,5 +10,6 @@ public interface ICustomFirebaseObject<T> : IFirebaseObject
 }
 public interface ICustomInstanceFirebaseObject : IFirebaseObject
 {
+    bool IsLoaded { get; }
     Task Load(string path);
 }

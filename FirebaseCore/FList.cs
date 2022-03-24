@@ -9,7 +9,7 @@ namespace NipahFirebase.FirebaseCore;
 [Firebase]
 public class FList<T> : ICustomInstanceFirebaseObject
 {
-
+    public bool IsLoaded { get; }
 
     public async Task Load(string path) { }
     public async Task Save(string path) { }
