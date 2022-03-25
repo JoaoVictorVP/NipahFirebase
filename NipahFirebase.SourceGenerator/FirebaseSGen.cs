@@ -37,7 +37,7 @@ public class FirebaseSGen : NipahSourceGenerator
         {
             if(s is TypeDeclarationSyntax {AttributeLists.Count: >0 } type)
             {
-                if (!(type is ClassDeclarationSyntax || type is StructDeclarationSyntax))
+                if (!(type is ClassDeclarationSyntax || type is StructDeclarationSyntax || type is RecordDeclarationSyntax))
                     return false;
 
                 foreach (var attrList in type.AttributeLists)
@@ -180,6 +180,18 @@ public class FirebaseSGen : NipahSourceGenerator
                 // load.variable = type.Load(path) /// path + "/Deep/" + dat.Name
                 //m.Invoke($"load.{dat.Name} = {dat.Type.FullName}.Load", Value.StringConcat(pathParam, "/Deep/", Value.Source(dat.Name)));
 
+                string isLoaded_Name = $"{member.Name}___loaded";
+                string setIsLoadedMethod_Name = $"AsLoaded_{member.Name}";
+
+                if (member.IsInstanceShallow is false)
+                {
+                    tb.Field(isLoaded_Name, typeof(bool), false, MemberVisibility.Private);
+
+                    tb.Method(setIsLoadedMethod_Name, typeof(void), new[] { new ParamBuilder("loaded", typeof(bool), true) }, visibility: MemberVisibility.Protected)
+                        .Bind(isLoaded_Name, true)
+                    .End();
+                }
+
                 var prop = tb.Property(member.PrimitiveShallowName, member.Type.AsValueTask());
 
                 var getter = prop.Getter();
@@ -191,12 +203,30 @@ public class FirebaseSGen : NipahSourceGenerator
                 }
                 else
                 {
-                    needLoad = ComparisonBuilder.Compare(new InvokeBuilder("Equals", false, Value.Source(member.Name), Value.Default), ComparisonKind.Equal, default);
+                    needLoad = ComparisonBuilder.Compare(Value.Source(isLoaded_Name), ComparisonKind.Different, default);
                 }
+
+                Value dbPath = Value.StringConcat(Value.Source(DatabasePath), "/Deep/", member.DBName);
+
+                InvokeBuilder getFromDB;
+                // If it is a primitive
+                if (member.PrimitiveShallow)
+                    getFromDB = new InvokeBuilder(DBGetPure.Replace("{TYPE}", member.Type.FullName), false, dbPath);
+                else
+                {
+                    // If it is a firebase instance object
+                    if (member.IsInstanceShallow)
+                        getFromDB = new InvokeBuilder($"{member.Name}.Load", false, dbPath);
+                    // If it is a normal firebase object
+                    else
+                        getFromDB = new InvokeBuilder(member.Type, "Load", dbPath);
+                }
+
                 var lambda = LambdaBuilder.New(MemberModifier.Async).Body()
                     .Bind(member.Name,
-                        new InvokeBuilder(DBGetPure.Replace("{TYPE}", member.Type.FullName), false, Value.StringConcat(Value.Source(DatabasePath), "/Deep/", member.DBName)).Await()
+                        getFromDB.Await()
                         )
+                    .Bind(isLoaded_Name, true)
                     .Return(Value.Source(member.Name)).
                     EndLambda();
 
@@ -213,12 +243,12 @@ public class FirebaseSGen : NipahSourceGenerator
                     if (member.PrimitiveShallow is false)
                     {
                         // value.Save(path) /// path + "/Deep/" + dat.Name
-                        setter.InvokeAsync($"{member.Name}.Save", Value.StringConcat(Value.Source(DatabasePath), "/Deep/", member.DBName));
+                        setter.InvokeAsync($"{member.Name}.Save", dbPath);
                     }
                     else
                     {
                         // Database.Set(value, path) /// path + "Shallow/" + dat.Name
-                        setter.InvokeAsync(DBSet, Value.Source(member.Name), Value.StringConcat(Value.Source(DatabasePath), "/Deep/", member.DBName));
+                        setter.InvokeAsync(DBSet, Value.Source(member.Name), dbPath);
                     }
                 }
                 setter.End();

@@ -1,4 +1,5 @@
 ﻿using NipahFirebase.FirebaseCore;
+using NipahFirebase.FirebaseCore.Attributes;
 using NUnit.Framework;
 
 namespace FirebaseSourceGeneratorTest;
@@ -15,6 +16,32 @@ public class TestFirebase
 
         await Auth.SignInAnonymously();
     }
+
+    [Test, Order(3)]
+    public async Task PraticalCaseTest_Save()
+    {
+        var person = new PraticalCaseObject_Person("Michaelis", 35);
+
+        person.Cryptos.Result.XMR = 53;
+
+        await person.Save("Clients/MyClient-000");
+
+        Assert.Pass();
+    }
+    [Test, Order(5)]
+    public async Task PraticalCaseTest_Load()
+    {
+        var client = await PraticalCaseObject_Person.Load("Clients/MyClient-000");
+        
+        Console.WriteLine(client);
+
+        var cryptos = await client.Cryptos;
+
+        Console.WriteLine($"BTC [{cryptos.BTC}], ETH [{cryptos.ETH}], XMR [{cryptos.XMR}]");
+
+        Assert.AreEqual(53, cryptos.XMR);
+    }
+
     [Test, Order(0)]
     public async Task TrySimpleObject()
     {
@@ -42,4 +69,19 @@ public class TestFirebase
 
         Assert.IsNotNull(simple);
     }
+}
+[Firebase]
+public partial class PraticalCaseObject_Person
+{
+    public string? Name;
+    public int Age;
+    Cryptos cryptos = new Cryptos { BTC = 1, ETH = 0.759m, XMR = 37 };
+
+    public PraticalCaseObject_Person() { }
+    public PraticalCaseObject_Person(string name, int age) { Name = name; Age = age; AsLoaded_cryptos(); }
+}
+[Firebase]
+public partial class Cryptos
+{
+    public decimal BTC, XMR, ETH;
 }
