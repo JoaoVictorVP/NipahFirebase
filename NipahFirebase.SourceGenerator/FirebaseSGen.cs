@@ -29,6 +29,11 @@ public class FirebaseSGen : NipahSourceGenerator
     const string DatabasePath = nameof(DatabasePath),
             SetDatabasePath = $"Set{DatabasePath}";
 
+    const string IDatabaseObject = "IFirebaseObject",
+        ICustomDatabaseObject = "ICustomFirebaseObject",
+        ICustomInstanceDatabaseObject = "ICustomInstanceFirebaseObject",
+        IPublicDatabaseObject = "IPublicFirebaseObject";
+
     public override void Initialize(IncrementalGeneratorInitializationContext context)
     {
          // Debugger.Launch();
@@ -89,8 +94,24 @@ public class FirebaseSGen : NipahSourceGenerator
             {
                 foreach(var inter in interfaces)
                 {
-                    if (inter.Name is "ICustomFirebaseObject" or "ICustomInstanceFirebaseObject")
+                    if (inter.Name is ICustomDatabaseObject or ICustomInstanceDatabaseObject)
+                    {
+                        // static method checking
+                        if(inter.Name is ICustomDatabaseObject)
+                        {
+                            foreach (var member in stype.Members)
+                            {
+                                if (member is MethodDeclarationSyntax { Identifier.ValueText: "Load", ParameterList.Parameters: { Count: 1 } } method)
+                                {
+                                    if(method.Modifiers.Any(SyntaxKind.StaticKeyword))
+                                        return;
+                                }
+                                else
+                                    context.AddSource("ERROR_NONLOAD", $"#error The type {name} should have a static method called Load with a string parameter or implement ICustomInstanceFirebaseObject instead");
+                            }
+                        }
                         return;
+                    }
                 }
             }
 
@@ -126,6 +147,8 @@ public class FirebaseSGen : NipahSourceGenerator
 
         putSaveMethod(members, tb, sources, defPath);
         putLoadMethod(members, type, tb, sources, defPath);
+        putDeleteMethod(members, tb, sources, defPath);
+
         putShallowProperties(members, type, tb, sources, defPath);
 
         tb.End();
@@ -164,7 +187,8 @@ public class FirebaseSGen : NipahSourceGenerator
 
     const string DBSet = "NipahFirebase.FirebaseCore.Database.Set",
         DBGet = "load.{VAR} = await NipahFirebase.FirebaseCore.Database.Get<{TYPE}>",
-        DBGetPure = "NipahFirebase.FirebaseCore.Database.Get<{TYPE}>";
+        DBGetPure = "NipahFirebase.FirebaseCore.Database.Get<{TYPE}>",
+        DBDelete = "NipahFirebase.FirebaseCore.Database.Delete";
 
     static void putShallowProperties(List<MemberData> members, INamedTypeSymbol type, TypeBuilder tb, ImmutableArray<(INamedTypeSymbol type, TypeDeclarationSyntax stype, AttributeData attr)> sources, string defPath)
     {
@@ -221,13 +245,21 @@ public class FirebaseSGen : NipahSourceGenerator
                     else
                         getFromDB = new InvokeBuilder(member.Type, "Load", dbPath);
                 }
+                LambdaBuilder lambda;
 
-                var lambda = LambdaBuilder.New(MemberModifier.Async).Body()
-                    .Bind(member.Name,
-                        getFromDB.Await()
-                        )
-                    .Bind(isLoaded_Name, true)
-                    .Return(Value.Source(member.Name)).
+                if(member.IsInstanceShallow is false)
+                    lambda = LambdaBuilder.New(MemberModifier.Async).Body()
+                        .Bind(member.Name,
+                            getFromDB.Await()
+                            )
+                        .Bind(isLoaded_Name, true)
+                        .Return(Value.Source(member.Name)).
+                    EndLambda();
+                else
+                    lambda = LambdaBuilder.New(MemberModifier.Async).Body()
+                        .Put(getFromDB.Await())
+                        .Bind(isLoaded_Name, true)
+                        .Return(Value.Source(member.Name)).
                     EndLambda();
 
                 getter.If(needLoad)
@@ -275,6 +307,11 @@ public class FirebaseSGen : NipahSourceGenerator
                     // value.Save(path) /// path + "/Deep/" + dat.Name
                     m.InvokeAsync($"{member.Name}.Save", Value.StringConcat(pathParam, "/Deep/", member.DBName));
                 }
+                else if(member.IsPublicObject)
+                {
+                    // value.Save(path) /// path + "/Deep/" + dat.Name
+                    m.InvokeAsync($"{member.Name}.Save", Value.StringConcat(pathParam, "/Deep/", member.DBName));
+                }
                 else
                 {
                     // Database.Set(value, path) /// path + "Shallow/" + dat.Name
@@ -300,10 +337,19 @@ public class FirebaseSGen : NipahSourceGenerator
 
         foreach (var member in members)
         {
-            if (member.IsShallow is false)
+            if (member.IsShallow is false && member.IsPublicObject is false)
             {
                 // load.variable = await Database.Get<type>(value, path) /// path + "Shallow/" + dat.Name
                 m.Invoke(DBGet.Replace("{VAR}", member.Name).Replace("{TYPE}", member.Type.FullName), Value.StringConcat(pathParam, "/Shallow/", member.DBName));
+            }
+            else if(member.IsPublicObject)
+            {
+                // If it is a firebase instance object
+                if (member.IsInstanceShallow)
+                    m.Put(new InvokeBuilder($"load.{member.Name}.Load", false, Value.StringConcat(pathParam, "/Deep/", member.DBName)));
+                // If it is a normal firebase object
+                else
+                    m.Bind($"load.{member.Name}", new InvokeBuilder(member.Type, "Load", Value.StringConcat(pathParam, "/Deep/", member.DBName)));
             }
         }
 
@@ -314,13 +360,43 @@ public class FirebaseSGen : NipahSourceGenerator
 
         m.End();
     }
+    static void putDeleteMethod(List<MemberData> members, TypeBuilder tb, ImmutableArray<(INamedTypeSymbol type, TypeDeclarationSyntax stype, AttributeData attr)> sources, string defPath)
+    {
+        var pathParam = new ParamBuilder("path", typeof(string), defPath is null ? default : defPath);
 
-    static bool IsCustomInstanceFirebaseObject(ITypeSymbol type)
+        var m = tb.Method("Delete", typeof(Task), new[] { pathParam }, modifiers: MemberModifier.Static | MemberModifier.Async);
+
+        m.InvokeAsync(DBDelete, Value.Source("path"));
+
+        m.End();
+    }
+
+    static bool IsCustomInstanceDatabaseObject(ITypeSymbol type)
     {
         if(type.Interfaces is ImmutableArray<INamedTypeSymbol> { Length: > 0 } interfaces)
         {
             foreach (var inter in interfaces)
-                if (inter.Name is "ICustomInstanceFirebaseObject")
+                if (inter.Name is ICustomInstanceDatabaseObject)
+                    return true;
+        }
+        return false;
+    }
+    static bool IsPublicObject(ITypeSymbol type)
+    {
+        if (type.Interfaces is ImmutableArray<INamedTypeSymbol> { Length: > 0 } interfaces)
+        {
+            foreach (var inter in interfaces)
+                if (inter.Name == IPublicDatabaseObject)
+                    return true;
+        }
+        return false;
+    }
+    static bool IsImplementingInterface(ITypeSymbol type, string interfaceName)
+    {
+        if (type.Interfaces is ImmutableArray<INamedTypeSymbol> { Length: > 0 } interfaces)
+        {
+            foreach (var inter in interfaces)
+                if (inter.Name == interfaceName)
                     return true;
         }
         return false;
@@ -330,60 +406,57 @@ public class FirebaseSGen : NipahSourceGenerator
     {
         if (member.Kind is SymbolKind.Field or SymbolKind.Property)
         {
-            if (member.DeclaredAccessibility is Accessibility.Public)
+            var field = member switch
             {
+                IFieldSymbol f => f.AsRef(),
+                IPropertySymbol {IsIndexer: false } p => p.AsRef(),
+                _ => default
+            };
+
+            bool isInstanceShallow = IsCustomInstanceDatabaseObject(field.Type.AsTypeSymbol());
+
+            if (field.IsNull is false) {
                 if (HasAttribute(member, IgnoreAttribute, out _))
                     return default;
-                MemberData dat;
-                if(member is IFieldSymbol field)
+
+                // For public members
+                if (member.DeclaredAccessibility is Accessibility.Public)
                 {
+                    MemberData dat;
+
+                    if (field.IsNull is false)
+                    {
+                        dat.Name = field.Name;
+                        dat.Type = field.Type;
+
+                    }
                     dat.Name = field.Name;
-                    dat.Type = field.Type.AsRef();
+                    dat.Type = field.Type;
                     dat.IsShallow = false;
-                    dat.IsInstanceShallow = false;
+                    dat.IsInstanceShallow = isInstanceShallow;
                     dat.PrimitiveShallow = false;
                     dat.PrimitiveShallowName = null;
                     dat.ShallowAutoSave = false;
+                    dat.IsPublicObject = IsPublicObject(dat.Type.AsTypeSymbol());
                     //dat.Type = fields.Declaration.Type;
 
                     return dat;
                 }
-                else if(member is IPropertySymbol {IsIndexer: false } prop)
+                // For private members (aka properties)
+                else if (member.DeclaredAccessibility is Accessibility.Private)
                 {
-                    dat.Name = prop.Name;
-                    dat.Type = prop.Type.AsRef();
-                    dat.IsShallow = false;
-                    dat.IsInstanceShallow = false;
-                    dat.PrimitiveShallow = false;
-                    dat.PrimitiveShallowName = null;
-                    dat.ShallowAutoSave = false;
+                    string formatName(string name)
+                    {
+                        if (name is null or "" or "_") return "SAMPLE";
+                        if (name[0] is '_')
+                            name = name.Remove(0, 1);
+                        if (char.IsLower(name[0]))
+                            name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name);
+                        return name;
+                    }
 
-                    return dat;
-                }
-            }
-            else if(member.DeclaredAccessibility is Accessibility.Private)
-            {
-                string formatName(string name)
-                {
-                    if (name is null or "" or "_") return "SAMPLE";
-                    if (name[0] is '_')
-                        name = name.Remove(0, 1);
-                    if(char.IsLower(name[0]))
-                        name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name);
-                    return name;
-                }
+                    MemberData dat;
 
-                MemberData dat;
-
-                var field = member switch
-                {
-                    IFieldSymbol f => f.AsRef(),
-                    IPropertySymbol p => p.AsRef(),
-                    _ => default
-                };
-
-                if(field.IsNull is false)
-                {
                     bool attrShallow = HasAttribute(field, ShallowAttribute, out var deep);
                     if (!sources.Any((val) => val.type.Name == field.Type.Name))
                     {
@@ -403,16 +476,17 @@ public class FirebaseSGen : NipahSourceGenerator
 
                     dat.Name = field.Name;
                     dat.Type = field.Type;
-                    dat.IsInstanceShallow = IsCustomInstanceFirebaseObject(dat.Type.AsTypeSymbol());
+                    dat.IsInstanceShallow = isInstanceShallow;
+                    dat.IsPublicObject = false;
 
                     dat.PrimitiveShallowName = formatName(dat.Name);
 
                     dat.ShallowAutoSave = false;
                     if (deep is not null && deep.NamedArguments is ImmutableArray<KeyValuePair<string, TypedConstant>> { Length: > 0 } args)
                     {
-                        foreach(var arg in args)
+                        foreach (var arg in args)
                         {
-                            if (arg.Key is "AutoSave" && arg.Value is TypedConstant { Kind: TypedConstantKind.Primitive, Value: true } )
+                            if (arg.Key is "AutoSave" && arg.Value is TypedConstant { Kind: TypedConstantKind.Primitive, Value: true })
                                 dat.ShallowAutoSave = true;
                         }
                     }
@@ -473,6 +547,7 @@ public class FirebaseSGen : NipahSourceGenerator
         public bool PrimitiveShallow;
         public string PrimitiveShallowName;
         public bool ShallowAutoSave;
+        public bool IsPublicObject;
 
         public string DBName => PrimitiveShallowName ?? Name;
     }

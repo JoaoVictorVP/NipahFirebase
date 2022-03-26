@@ -18,6 +18,11 @@ public static class Database
         await Client.Child(path).PutAsync(value);
     }
 
+    public static async Task Delete(string path)
+    {
+        await Client.Child(path).DeleteAsync();
+    }
+
     public static void Initialize()
 {
         if (Client is not null)

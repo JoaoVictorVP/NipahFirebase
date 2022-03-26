@@ -43,6 +43,29 @@ public class TestFirebase
     }
 
     [Test, Order(0)]
+    public async Task ListTest_Save()
+    {
+        var list = new ListTestCase();
+        await list.Spent.Add(("A random book", 305));
+        await list.Spent.Add(("A new collection of shoes", 5000));
+        await list.Spent.Add(("A order for the book Man, The Economy and the state", 103));
+
+        list.Save("Funds");
+
+        Assert.Pass();
+    }
+    [Test, Order(1)]
+    public async Task ListTest_Load()
+    {
+        var list = await ListTestCase.Load("Funds");
+        //var list = new ListTestCase();
+
+        Assert.AreEqual(("A random book", 305), await list.Spent.Get(0));
+        Assert.AreEqual("A new collection of shoes", (await list.Spent.Get(1)).desc);
+        Assert.AreEqual(103, (await list.Spent.Get(2)).spent);
+    }
+
+    [Test, Order(0)]
     public async Task TrySimpleObject()
     {
         var simple = new TestFirebaseObject
@@ -84,4 +107,11 @@ public partial class PraticalCaseObject_Person
 public partial class Cryptos
 {
     public decimal BTC, XMR, ETH;
+}
+
+[Firebase]
+public partial class ListTestCase
+{
+    public string Email;
+    public FList<(string desc, decimal spent)> Spent = new ("---ListTestCase-Spent");
 }

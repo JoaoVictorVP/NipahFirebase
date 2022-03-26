@@ -8,6 +8,18 @@
     <IsRoslynComponent>true</IsRoslynComponent>
   </PropertyGroup>
 
+  <!-- For NuGet Building -->
+  <!--<PropertyGroup>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FirebaseCore" />
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>-->
+  <!-- End NuGet Area -->
+
   <ItemGroup>
 
     <Compile Include="C:\Users\Furude Rika\source\repos\NipahSourceGenerators\NipahSourceGenerators.Core\NipahSourceGenerators\**\*.*">
