@@ -23,7 +23,8 @@ public class FirebaseSGen : NipahSourceGenerator
         FirebaseAttribute = "FirebaseAttribute",
         IgnoreAttribute = "IgnoreAttribute",
         IndexedAttribute = "IndexedAttribute",
-        ShallowAttribute = nameof(ShallowAttribute);//,
+        ShallowAttribute = nameof(ShallowAttribute),
+        DatabaseNameAttribute = nameof(DatabaseNameAttribute);//,
                                                     //ShallowAttribute = "Shallow";
 
     const string DatabasePath = nameof(DatabasePath),
@@ -33,6 +34,8 @@ public class FirebaseSGen : NipahSourceGenerator
         ICustomDatabaseObject = "ICustomFirebaseObject",
         ICustomInstanceDatabaseObject = "ICustomInstanceFirebaseObject",
         IPublicDatabaseObject = "IPublicFirebaseObject";
+
+    const string DBPath_Deep = "NipahFirebase.FirebaseCore.DBPath.FastGetDeepPath";
 
     public override void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -230,7 +233,7 @@ public class FirebaseSGen : NipahSourceGenerator
                     needLoad = ComparisonBuilder.Compare(Value.Source(isLoaded_Name), ComparisonKind.Different, default);
                 }
 
-                Value dbPath = Value.StringConcat(Value.Source(DatabasePath), "/Deep/", member.DBName);
+                Value dbPath = new InvokeBuilder(DBPath_Deep, false, Value.StringConcat(Value.Source(DatabasePath), "/", member.DBName));
 
                 InvokeBuilder getFromDB;
                 // If it is a primitive
@@ -302,20 +305,24 @@ public class FirebaseSGen : NipahSourceGenerator
         {
             if(member.IsNull is false)
             {
-                if((member.IsShallow && member.ShallowAutoSave is false) && member.PrimitiveShallow is false)
+                if (member.IsShallow || member.IsPublicObject)
                 {
-                    // value.Save(path) /// path + "/Deep/" + dat.Name
-                    m.InvokeAsync($"{member.Name}.Save", Value.StringConcat(pathParam, "/Deep/", member.DBName));
-                }
-                else if(member.IsPublicObject)
-                {
-                    // value.Save(path) /// path + "/Deep/" + dat.Name
-                    m.InvokeAsync($"{member.Name}.Save", Value.StringConcat(pathParam, "/Deep/", member.DBName));
+                    var deepPath = new InvokeBuilder(DBPath_Deep, false, Value.StringConcat(pathParam, "/", member.DBName));
+                    if ((member.IsShallow && member.ShallowAutoSave is false) && member.PrimitiveShallow is false)
+                    {
+                        // value.Save(path) /// path + "/Deep/" + dat.Name
+                        m.InvokeAsync($"{member.Name}.Save", deepPath);
+                    }
+                    else if (member.IsPublicObject)
+                    {
+                        // value.Save(path) /// path + "/Deep/" + dat.Name
+                        m.InvokeAsync($"{member.Name}.Save", deepPath);
+                    }
                 }
                 else
                 {
                     // Database.Set(value, path) /// path + "Shallow/" + dat.Name
-                    m.InvokeAsync(DBSet, Value.Source(member.Name), Value.StringConcat(pathParam, "/Shallow/", member.DBName));
+                    m.InvokeAsync(DBSet, Value.Source(member.Name), Value.StringConcat(pathParam, "/", member.DBName));
                 }
             }
         }
@@ -339,17 +346,19 @@ public class FirebaseSGen : NipahSourceGenerator
         {
             if (member.IsShallow is false && member.IsPublicObject is false)
             {
+                var shallowPath = Value.StringConcat(pathParam, "/", member.DBName);
                 // load.variable = await Database.Get<type>(value, path) /// path + "Shallow/" + dat.Name
-                m.Invoke(DBGet.Replace("{VAR}", member.Name).Replace("{TYPE}", member.Type.FullName), Value.StringConcat(pathParam, "/Shallow/", member.DBName));
+                m.Invoke(DBGet.Replace("{VAR}", member.Name).Replace("{TYPE}", member.Type.FullName), shallowPath);
             }
             else if(member.IsPublicObject)
             {
+                var deepPath = new InvokeBuilder(DBPath_Deep, false, Value.StringConcat(pathParam, "/", member.DBName));
                 // If it is a firebase instance object
                 if (member.IsInstanceShallow)
-                    m.Put(new InvokeBuilder($"load.{member.Name}.Load", false, Value.StringConcat(pathParam, "/Deep/", member.DBName)));
+                    m.Put(new InvokeBuilder($"load.{member.Name}.Load", false, deepPath));
                 // If it is a normal firebase object
                 else
-                    m.Bind($"load.{member.Name}", new InvokeBuilder(member.Type, "Load", Value.StringConcat(pathParam, "/Deep/", member.DBName)));
+                    m.Bind($"load.{member.Name}", new InvokeBuilder(member.Type, "Load", deepPath));
             }
         }
 
@@ -415,6 +424,10 @@ public class FirebaseSGen : NipahSourceGenerator
 
             bool isInstanceShallow = IsCustomInstanceDatabaseObject(field.Type.AsTypeSymbol());
 
+            string explicitName = null;
+            if(HasAttribute(field, DatabaseNameAttribute, out var dbName))
+                explicitName = (string)dbName.ConstructorArguments[0].Value;
+
             if (field.IsNull is false) {
                 if (HasAttribute(member, IgnoreAttribute, out _))
                     return default;
@@ -438,6 +451,7 @@ public class FirebaseSGen : NipahSourceGenerator
                     dat.PrimitiveShallowName = null;
                     dat.ShallowAutoSave = false;
                     dat.IsPublicObject = IsPublicObject(dat.Type.AsTypeSymbol());
+                    dat.ExplicitDatabaseName = explicitName;
                     //dat.Type = fields.Declaration.Type;
 
                     return dat;
@@ -480,6 +494,8 @@ public class FirebaseSGen : NipahSourceGenerator
                     dat.IsPublicObject = false;
 
                     dat.PrimitiveShallowName = formatName(dat.Name);
+
+                    dat.ExplicitDatabaseName = explicitName;
 
                     dat.ShallowAutoSave = false;
                     if (deep is not null && deep.NamedArguments is ImmutableArray<KeyValuePair<string, TypedConstant>> { Length: > 0 } args)
@@ -546,10 +562,11 @@ public class FirebaseSGen : NipahSourceGenerator
         public bool IsInstanceShallow;
         public bool PrimitiveShallow;
         public string PrimitiveShallowName;
+        public string ExplicitDatabaseName;
         public bool ShallowAutoSave;
         public bool IsPublicObject;
 
-        public string DBName => PrimitiveShallowName ?? Name;
+        public string DBName => ExplicitDatabaseName ?? PrimitiveShallowName ?? Name;
     }
 }
 public static class FastLinq
