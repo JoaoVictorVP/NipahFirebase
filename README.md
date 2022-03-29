@@ -1,4 +1,3 @@
-
 # Nipah Firebase
 ## Introduction
 What is ***Nipah Firebase***?
@@ -6,7 +5,7 @@ A complex framework that makes heavy use of the C# source generator to facilitat
 
 ## Installation
 ```
-dotnet add package NipahFirebase.FirebaseCore
+dotnet add package FirebaseCore
 dotnet add package NipahFirebase.SourceGenerator
 ```
 Then set it up like this:
@@ -89,7 +88,7 @@ public async void NewUser(string name, string email)
 {
 	// name and email validation things here...
 	var user = new User(name, email);
-	await user.Save("Users/{user.Id});
+	await user.Save("Users/{user.Id}");
 }
 ```
 Simple as that, we will have our user saved in the database and ready to be used at any time!
@@ -106,7 +105,7 @@ In order to be able, if necessary, to delete a user from the database:
 ```csharp
 public async void DeleteUser(User user)
 {
-	await user.Delete();
+	await user.Delete($"Users/{user.Id}");
 }
 ```
 And finally, to be able to use the messages object at will, including sending a message:
