@@ -10,16 +10,66 @@ public struct DBPath
     {
         var path = new DBPath(from);
 
-        Span<byte> pathB = stackalloc byte[Encoding.UTF8.GetByteCount(from)];
-        Encoding.UTF8.GetBytes(from, pathB);
-        Span<byte> hash = stackalloc byte[16];
-        MD5.HashData(pathB, hash);
-        path.Insert(0, Convert.ToHexString(hash[..(16/4)]) + '-');
+        bool hasDeep = path.GetFirstPathName().Contains("Deep");
 
-        if(path.GetFirstPathName().Contains("Deep") is false)
+        if (hasDeep is false)
+        {
+            Span<byte> pathB = stackalloc byte[Encoding.UTF8.GetByteCount(from)];
+            Encoding.UTF8.GetBytes(from, pathB);
+            Span<byte> hash = stackalloc byte[16];
+            MD5.HashData(pathB, hash);
+            path.Insert(0, Convert.ToHexString(hash[..(16 / 4)]) + '-');
+
             path.Insert(0, DeepNotation);
+        }
 
         return path.ToString();
+    }
+    public static string FastGetDeepPath<T>(string from)
+    {
+        var path = new DBPath(from);
+
+        bool hasDeep = path.GetFirstPathName().Contains("Deep");
+
+        if (hasDeep is false)
+        {
+            string fdeep = $"{DeepNotation}{GetRealTypeName(typeof(T))}/";
+
+            /*Span<byte> pathB = stackalloc byte[Encoding.UTF8.GetByteCount(from)];
+            Encoding.UTF8.GetBytes(from, pathB);
+            Span<byte> hash = stackalloc byte[16];
+            MD5.HashData(pathB, hash);
+            path.Insert(0, Convert.ToHexString(hash[..(16 / 4)]) + '-');*/
+
+            path.Insert(0, fdeep);
+        }
+
+        return path.ToString();
+    }
+    static Dictionary<Type, string> cachedNames = new Dictionary<Type, string>(32);
+    static string GetRealTypeName(Type t)
+    {
+        if (!t.IsGenericType)
+            return t.Name;
+
+        if (cachedNames.TryGetValue(t, out string? name))
+            return name;
+
+        StringBuilder sb = new StringBuilder();
+        sb.Append(t.Name.AsSpan(0, t.Name.IndexOf('`')));
+        sb.Append('<');
+        bool appendComma = false;
+        foreach (Type arg in t.GetGenericArguments())
+        {
+            if (appendComma) sb.Append(',');
+            sb.Append(GetRealTypeName(arg));
+            appendComma = true;
+        }
+        sb.Append('>');
+
+        name = sb.ToString();
+        cachedNames[t] = name;
+        return name;
     }
 
     public readonly StringBuilder Path;
@@ -45,10 +95,11 @@ public struct DBPath
     }
     public string GetFirstPathName()
     {
+        int length = Path.Length;
         string cur = "";
         int offset = 0;
     begin:
-        if (Path[offset] is char c and not '/')
+        if (offset < length && Path[offset] is char c and not '/')
         {
             cur += c;
             offset++;

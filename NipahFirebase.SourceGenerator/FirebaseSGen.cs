@@ -35,7 +35,7 @@ public class FirebaseSGen : NipahSourceGenerator
         ICustomInstanceDatabaseObject = "ICustomInstanceFirebaseObject",
         IPublicDatabaseObject = "IPublicFirebaseObject";
 
-    const string DBPath_Deep = "NipahFirebase.FirebaseCore.DBPath.FastGetDeepPath";
+    const string DBPath_Deep = "NipahFirebase.FirebaseCore.DBPath.FastGetDeepPath<{TYPE}>";
 
     public override void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -148,9 +148,9 @@ public class FirebaseSGen : NipahSourceGenerator
 
         var members = GetMembersData(type, sources);
 
-        putSaveMethod(members, tb, sources, defPath);
+        putSaveMethod(members, tb, type, sources, defPath);
         putLoadMethod(members, type, tb, sources, defPath);
-        putDeleteMethod(members, tb, sources, defPath);
+        putDeleteMethod(members, type, tb, sources, defPath);
 
         putShallowProperties(members, type, tb, sources, defPath);
 
@@ -233,7 +233,7 @@ public class FirebaseSGen : NipahSourceGenerator
                     needLoad = ComparisonBuilder.Compare(Value.Source(isLoaded_Name), ComparisonKind.Different, default);
                 }
 
-                Value dbPath = new InvokeBuilder(DBPath_Deep, false, Value.StringConcat(Value.Source(DatabasePath), "/", member.DBName));
+                Value dbPath = new InvokeBuilder(DBPath_Deep.Replace("{TYPE}", type.ToDisplayString()), false, Value.StringConcat(Value.Source(DatabasePath), "/", member.DBName));
 
                 InvokeBuilder getFromDB;
                 // If it is a primitive
@@ -293,7 +293,7 @@ public class FirebaseSGen : NipahSourceGenerator
         }
     }
 
-    static void putSaveMethod(List<MemberData> members, TypeBuilder tb, ImmutableArray<(INamedTypeSymbol type, TypeDeclarationSyntax stype, AttributeData attr)> sources, string defPath)
+    static void putSaveMethod(List<MemberData> members, TypeBuilder tb, INamedTypeSymbol on_type, ImmutableArray<(INamedTypeSymbol type, TypeDeclarationSyntax stype, AttributeData attr)> sources, string defPath)
     {
         var pathParam = new ParamBuilder("path", typeof(string), defPath is null ? default : defPath);
 
@@ -307,7 +307,7 @@ public class FirebaseSGen : NipahSourceGenerator
             {
                 if (member.IsShallow || member.IsPublicObject)
                 {
-                    var deepPath = new InvokeBuilder(DBPath_Deep, false, Value.StringConcat(pathParam, "/", member.DBName));
+                    var deepPath = new InvokeBuilder(DBPath_Deep.Replace("{TYPE}", on_type.ToDisplayString()), false, Value.StringConcat(pathParam, "/", member.DBName));
                     if ((member.IsShallow && member.ShallowAutoSave is false) && member.PrimitiveShallow is false)
                     {
                         // value.Save(path) /// path + "/Deep/" + dat.Name
@@ -352,7 +352,7 @@ public class FirebaseSGen : NipahSourceGenerator
             }
             else if(member.IsPublicObject)
             {
-                var deepPath = new InvokeBuilder(DBPath_Deep, false, Value.StringConcat(pathParam, "/", member.DBName));
+                var deepPath = new InvokeBuilder(DBPath_Deep.Replace("{TYPE}", type.ToDisplayString()), false, Value.StringConcat(pathParam, "/", member.DBName));
                 // If it is a firebase instance object
                 if (member.IsInstanceShallow)
                     m.Put(new InvokeBuilder($"load.{member.Name}.Load", false, deepPath));
@@ -369,13 +369,47 @@ public class FirebaseSGen : NipahSourceGenerator
 
         m.End();
     }
-    static void putDeleteMethod(List<MemberData> members, TypeBuilder tb, ImmutableArray<(INamedTypeSymbol type, TypeDeclarationSyntax stype, AttributeData attr)> sources, string defPath)
+    static void putDeleteMethod(List<MemberData> members, INamedTypeSymbol type, TypeBuilder tb, ImmutableArray<(INamedTypeSymbol type, TypeDeclarationSyntax stype, AttributeData attr)> sources, string defPath)
     {
         var pathParam = new ParamBuilder("path", typeof(string), defPath is null ? default : defPath);
 
-        var m = tb.Method("Delete", typeof(Task), new[] { pathParam }, modifiers: MemberModifier.Static | MemberModifier.Async);
+        var m = tb.Method("Delete", typeof(Task), new[] { pathParam }, modifiers: MemberModifier.Async);
 
-        m.InvokeAsync(DBDelete, Value.Source("path"));
+        foreach(var member in members)
+        {
+            if(member.IsShallow || member.IsPublicObject)
+            {
+                if(member.IsPublicObject && member.IsInstanceShallow)
+                {
+                    var deepPath = new InvokeBuilder(DBPath_Deep.Replace("{TYPE}", type.ToDisplayString()), false, Value.StringConcat(pathParam, "/", member.DBName));
+
+                    m.If(ComparisonBuilder.Compare(Value.Source($"{member.Name}.IsLoaded"), ComparisonKind.Different, default))
+                        .InvokeAsync($"{member.Name}.Load", deepPath)
+                        //.Bind("_", Value.Source($"await {member.PrimitiveShallowName ?? member.Name}"))
+                    .EndIf();
+
+                    m.InvokeAsync($"{member.Name}.Delete", deepPath);
+                }
+                else if(member.IsPublicObject is false)
+                {
+                    var deepPath = new InvokeBuilder(DBPath_Deep.Replace("{TYPE}", type.ToDisplayString()), false, Value.StringConcat(pathParam, "/", member.DBName));
+
+                    m.InvokeAsync(DBDelete, deepPath);
+                }
+                /*if (member.IsInstanceShallow)
+                {
+                    m.InvokeAsync($"{member.Name}.Delete", Value.Source(pathParam.Name));
+                }
+                else
+                    m.InvokeAsync($"{member.Type.FullName}.Delete", Value.Source(pathParam.Name));*/
+            }
+        }
+
+        // Delete all deep
+        m.InvokeAsync(DBDelete, new InvokeBuilder(DBPath_Deep.Replace("{TYPE}", type.ToDisplayString()), false, pathParam));
+
+        // Delete all shallow
+        m.InvokeAsync(DBDelete, Value.Source(pathParam.Name));
 
         m.End();
     }

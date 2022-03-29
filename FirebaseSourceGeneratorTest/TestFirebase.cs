@@ -1,5 +1,6 @@
 ﻿using NipahFirebase.FirebaseCore;
 using NipahFirebase.FirebaseCore.Attributes;
+using NipahFirebase.FirebaseCore.Attributes.Members;
 using NUnit.Framework;
 
 namespace FirebaseSourceGeneratorTest;
@@ -40,17 +41,22 @@ public class TestFirebase
         Console.WriteLine($"BTC [{cryptos.BTC}], ETH [{cryptos.ETH}], XMR [{cryptos.XMR}]");
 
         Assert.AreEqual(53, cryptos.XMR);
+
+        await client.Delete("Clients/MyClient-000");
     }
 
     [Test, Order(0)]
     public async Task ListTest_Save()
     {
-        var list = new ListTestCase();
+        var list = new ListTestCase
+        {
+            Email = "sample@mail.com"
+        };
         await list.Spent.Add(("A random book", 305));
         await list.Spent.Add(("A new collection of shoes", 5000));
         await list.Spent.Add(("A order for the book Man, The Economy and the state", 103));
 
-        list.Save("Funds");
+        await list.Save("Funds");
 
         Assert.Pass();
     }
@@ -63,6 +69,8 @@ public class TestFirebase
         Assert.AreEqual(("A random book", 305), await list.Spent.Get(0));
         Assert.AreEqual("A new collection of shoes", (await list.Spent.Get(1)).desc);
         Assert.AreEqual(103, (await list.Spent.Get(2)).spent);
+
+        await list.Delete("Funds");
     }
 
     [Test, Order(0)]
@@ -91,6 +99,8 @@ public class TestFirebase
         var simple = await TestFirebaseObject.Load();
 
         Assert.IsNotNull(simple);
+
+        simple.Delete();
     }
 }
 [Firebase]
@@ -112,6 +122,7 @@ public partial class Cryptos
 [Firebase]
 public partial class ListTestCase
 {
+    [DatabaseName("Email")]
     public string Email;
     public FList<(string desc, decimal spent)> Spent = new ("---ListTestCase-Spent");
 }
