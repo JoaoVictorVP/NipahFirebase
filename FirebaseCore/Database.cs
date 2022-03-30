@@ -26,7 +26,11 @@ public static class Database
     {
         return await Client.Child(path).OnceSingleAsync<T>();
     }
-    
+    public static async Task<T> GetAndOrderByChild<T>(string path, string child)
+    {
+        return await Client.Child(path).OrderBy(child).OnceSingleAsync<T>();
+    }
+
     public static async Task<DatabaseEnumerable<T>> GetAll<T>(string path)
     {
         var results = await Client.Child(path).OnceAsync<T>();
@@ -217,11 +221,16 @@ public struct Patcher
                 }
                 if (anyDeep)
                 {
-                    foreach (var value in values)
+                    values.AsParallel().ForAll(async value =>
                     {
                         if (value.Value is not Dictionary<string, object>)
                             await Database.Set(value.Value, path.MoveDown(value.Key).Path);
-                    }
+                    });
+                    /*foreach (var value in values)
+                    {
+                        if (value.Value is not Dictionary<string, object>)
+                            await Database.Set(value.Value, path.MoveDown(value.Key).Path);
+                    }*/
                 }
                 else
                 {

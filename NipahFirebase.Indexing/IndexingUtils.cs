@@ -6,6 +6,7 @@ public static class IndexingUtils
 		Index = Uri.UnescapeDataString("!Index"),
 		Final = Uri.UnescapeDataString("!Final");
 
+	public static string FormatPath(string input) => input.Replace(".", "!").Replace("$", "-").Replace("#", "~").Replace(",", "_");
 
     static char[] separators = new[] { ' ', ',', '.', '!', ':', '/', '\\', '\n', '*', '+', '-', '#', '@', '$', '%', '&', '?' };
     

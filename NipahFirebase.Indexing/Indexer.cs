@@ -3,7 +3,7 @@ using NipahFirebase.FirebaseCore;
 
 // using Patcher = System.Collections.Generic.Dictionary<string, object>;
 using Dict = System.Collections.Generic.Dictionary<string, object>;
-using TimeStamp = System.Collections.Generic.Dictionary<string, long>;
+using TimeStamp = System.Collections.Generic.Dictionary<string, NipahFirebase.Indexing.HistoryStamp>;
 
 namespace NipahFirebase.Indexing;
 
@@ -15,6 +15,10 @@ public readonly struct Indexer
     /// Final path on indexes
     /// </summary>
     public string IndexPath => $"{IndexingUtils.Indexes}/Final/{PathIndex}";
+    /// <summary>
+    /// Final path on indexes (to store cache)
+    /// </summary>
+    public string IndexPathStore => $"{IndexingUtils.Indexes}/FinalData/{PathIndex}";
     public int ChunkSize { get; init; }
     Patcher patcher { get; init; }
 
@@ -23,7 +27,7 @@ public readonly struct Indexer
     public Indexer For(string path)
     {
         var self = this with { Path = path, patcher = patcher ^ Patcher.New() };
-        patcher.WaitForPatching(async () => await Database.Set(self.PathIndex, self.IndexPath));
+        patcher.WaitForPatching(async () => await Database.Set(path, self.IndexPath));
         return self;
     }
     public Indexer WithChunkSize(int chunkSize) => this with { ChunkSize = chunkSize, patcher = patcher ^ Patcher.New() };
@@ -70,7 +74,7 @@ public readonly struct Indexer
 
                     chunk[segment] = indexes;
                 }
-                count /= 10;
+                // count /= 10;
                 if (count > self.ChunkSize)
                 {
                     foreach (var perm in perms)
@@ -110,7 +114,7 @@ public readonly struct Indexer
                 else
                 {
                     chunk[perm] = indexes = new HashSet<int>(32);
-                    history.Add(perm, DateTime.UtcNow.Ticks);
+                    history[perm] = (master, DateTime.UtcNow.Ticks);
                     modHistory = true;
                 }
 
@@ -122,14 +126,13 @@ public readonly struct Indexer
             await Database.Set(chunk, path.MoveDown(master.ToString()));
             if (modHistory)
                 await Database.Set(history, path.MoveDown("History"));
+
+            await Database.Set(index, path.MoveDown("Directs").MoveDown(IndexingUtils.FormatPath(value)));
         });
 
         return this;
     }
-    struct Master
-    {
-        public string Last;
-    }
+
     public Indexer Boolean(string key, bool value)
     {
         clearPrevious(key);
@@ -143,7 +146,7 @@ public readonly struct Indexer
         //await Database.Set(index, indexedPath);
         patcher.Set(index, indexedPath);
 
-        patcher.Post(indexedPath, IndexPath + '/' + key);
+        patcher.Post(indexedPath, IndexPathStore + '/' + key);
 
         return this;
     }
@@ -168,12 +171,12 @@ public readonly struct Indexer
             indexedPath.MoveDown(r.ToString());
             if(r is not '0')
             {
-                indexedPath.MoveDown(chunk.ToString()).MoveDown(keyIndex.ToString());
+                indexedPath.MoveDown(IndexingUtils.Index).MoveDown(chunk.ToString()).MoveDown(keyIndex.ToString());
                 string idxPath = indexedPath.ToString();
                 //await Database.Set(index, idxPath);
                 patcher.Set(index, idxPath);
 
-                patcher.Post(idxPath, IndexPath + '/' + key);
+                patcher.Post(idxPath, IndexPathStore + '/' + key);
                 break;
             }
         }
@@ -185,7 +188,7 @@ public readonly struct Indexer
         var self = this;
         patcher.WaitForPatching(async Task () =>
         {
-            string previousPath = self.IndexPath + '/' + key;
+            string previousPath = self.IndexPathStore + '/' + key;
 
             var previous = await Database.GetAll<string>(previousPath);
             foreach (var item in previous)
@@ -193,5 +196,25 @@ public readonly struct Indexer
 
             await Database.Delete(previousPath);
         });
+    }
+}
+public struct HistoryStamp
+{
+    public readonly int Master;
+    public readonly long Time;
+
+    public static implicit operator HistoryStamp ((int, long) tuple) => new (tuple.Item1, tuple.Item2);
+    public static implicit operator (int master, long time) (HistoryStamp stamp) => (stamp.Master, stamp.Time);
+
+    public void Deconstruct(out int master, out long time)
+    {
+        master = Master;
+        time = Time;
+    }
+
+    public HistoryStamp(int master, long time)
+    {
+        Master = master;
+        Time = time;
     }
 }

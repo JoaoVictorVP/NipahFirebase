@@ -148,6 +148,8 @@ public readonly struct ImmutableDBPath
 
     public static implicit operator string (ImmutableDBPath path) => path.Path;
 
+    public override string ToString() => Path;
+
     public string GetCurrentPathName()
     {
         string cur = "";
