@@ -1,13 +1,16 @@
-﻿using NipahFirebase.FirebaseCore;
+﻿using Newtonsoft.Json;
+using NipahFirebase.FirebaseCore;
 
 // using Patcher = System.Collections.Generic.Dictionary<string, object>;
+using Dict = System.Collections.Generic.Dictionary<string, object>;
+using TimeStamp = System.Collections.Generic.Dictionary<string, long>;
 
 namespace NipahFirebase.Indexing;
 
 public readonly struct Indexer
 {
     public string Path { get; init; }
-    public int PathIndex => Path.GetHashCode();
+    public int PathIndex => Path.GetDeterministicHashCode();
     /// <summary>
     /// Final path on indexes
     /// </summary>
@@ -27,31 +30,112 @@ public readonly struct Indexer
     
     public Indexer String(string key, string value)
     {
-        clearPrevious(key);
+        // clearPrevious(key);
 
-        List<string> perms = new List<string>(32);
-        IndexingUtils.SmartPermuteString(value, perms);
-        int index = PathIndex;
-        int keyIndex = (PathIndex + key).GetHashCode();
-        int chunk = Math.Abs(keyIndex % ChunkSize);
-
-        foreach (var perm in perms)
+        var self = this;
+        patcher.WaitForPatching(async () =>
         {
-            string indexedPath = $"{IndexingUtils.Indexes}/{key}/{perm}/{IndexingUtils.Index}/{chunk}/{keyIndex}";
-            patcher.Set(index, indexedPath);
+            List<string> perms = new List<string>(32);
+            IndexingUtils.SmartPermuteString(value, perms);
+            int index = self.PathIndex;
+            //int keyIndex = (self.PathIndex + key).GetHashCode();
+            //int chunk = Math.Abs(keyIndex % self.ChunkSize);
 
-            // For latter changes
-            patcher.Post(indexedPath, IndexPath + '/' + key);
-        }
+            var path = new ImmutableDBPath($"{IndexingUtils.Indexes}/{key}");
+
+            var master = int.Parse(await Database.Get<string>(path.MoveDown("Master")) ?? "-1");
+            bool firstMaster = false;
+            if (master < 0) { firstMaster = true; master = 0; }
+
+            Dict chunk;
+            if (firstMaster)
+                chunk = new Dict(32);
+            else
+                chunk = await Database.Get<Dict>(path.MoveDown(master.ToString()));
+            TimeStamp history;
+            bool modHistory = false;
+            if (firstMaster)
+            { history = new TimeStamp(32); modHistory = true; }
+            else
+                history = await Database.Get<TimeStamp>(path.MoveDown("History"));
+
+            if (firstMaster is false)
+            {
+                int count = 0;
+                foreach (var (segment, o_indexes) in chunk)
+                {
+                    var indexes = JsonConvert.DeserializeObject<HashSet<int>>((string)o_indexes);
+
+                    count += indexes.Count;
+
+                    chunk[segment] = indexes;
+                }
+                count /= 10;
+                if (count > self.ChunkSize)
+                {
+                    foreach (var perm in perms)
+                    {
+                        if (chunk.TryGetValue(perm, out var o_indexes) && o_indexes is HashSet<int> indexes)
+                        {
+                            indexes.Remove(index);
+                            if(indexes.Count == 0)
+                            {
+                                chunk.Remove(perm);
+                                history.Remove(perm);
+                                modHistory = true;
+                            }
+                        }
+                    }
+
+                    var clone = new Dict(chunk);
+                    foreach (var pair in clone)
+                        clone[pair.Key] = JsonConvert.SerializeObject(pair.Value);
+
+                    await Database.Set(clone, path.MoveDown(master.ToString()));
+
+                    chunk = new Dict(32);
+
+                    master++;
+                    await Database.Set(master, path.MoveDown("Master"));
+                }
+            }
+            else
+                await Database.Set(master, path.MoveDown("Master"));
+            
+            foreach(var perm in perms)
+            {
+                HashSet<int> indexes;
+                if (chunk.TryGetValue(perm, out var o_indexes) && o_indexes is HashSet<int>)
+                    indexes = (HashSet<int>)o_indexes;
+                else
+                {
+                    chunk[perm] = indexes = new HashSet<int>(32);
+                    history.Add(perm, DateTime.UtcNow.Ticks);
+                    modHistory = true;
+                }
+
+                indexes.Add(index);
+            }
+            foreach (var pair in chunk)
+                chunk[pair.Key] = JsonConvert.SerializeObject(pair.Value);
+
+            await Database.Set(chunk, path.MoveDown(master.ToString()));
+            if (modHistory)
+                await Database.Set(history, path.MoveDown("History"));
+        });
 
         return this;
+    }
+    struct Master
+    {
+        public string Last;
     }
     public Indexer Boolean(string key, bool value)
     {
         clearPrevious(key);
 
         int index = PathIndex;
-        int keyIndex = (PathIndex + key).GetHashCode();
+        int keyIndex = (PathIndex + key).GetDeterministicHashCode();
         int chunk = Math.Abs(keyIndex % ChunkSize);
 
         string indexedPath = $"{IndexingUtils.Indexes}/{key}/{(value ? "true" : "false")}/{IndexingUtils.Index}/{chunk}/{keyIndex}";
@@ -69,7 +153,7 @@ public readonly struct Indexer
         clearPrevious(key);
 
         int index = PathIndex;
-        int keyIndex = (PathIndex + key).GetHashCode();
+        int keyIndex = (PathIndex + key).GetDeterministicHashCode();
         int chunk = Math.Abs(keyIndex % ChunkSize);
 
         var indexedPath = new DBPath($"{IndexingUtils.Indexes}/{key}");

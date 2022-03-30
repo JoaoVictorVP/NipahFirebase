@@ -20,36 +20,49 @@ public class IndexTests
     }
 
     const string IndexableUserPath = "Users/Client-000",
-        IndexableUserPath1 = "Users/Client-001";
+        IndexableUserPath1 = "Users/Client-001",
+        IndexableUserPath2 = "Users/Client-002";
 
     [Test]
     public async Task TestIndexableUser_SaveAndIndex()
     {
-        var user = new IndexableUser("John", "diadetedio@outlook.com");
+        var user = new IndexableUser("John", "diadetedio@outlook.com", 1000, true);
 
         await user.Save(IndexableUserPath);
 
         await new Indexer().WithChunkSize(100).For(IndexableUserPath)
             .String("Name", user.Name)
             .String("Email", user.Email)
+            .Number("Money", user.Money, 5)
+            .Boolean("Good", user.Good)
             .AsPatcher()
                 .DoPatch(false);
 
         // Other user with name as "Marry" and email as "marry@email.com"
-        user = new IndexableUser("Marry", "marry@email.com");
+        user = new IndexableUser("Marry", "marry@email.com", 300, true);
 
         await user.Save(IndexableUserPath1);
 
         await new Indexer().WithChunkSize(100).For(IndexableUserPath1)
             .String("Name", user.Name)
             .String("Email", user.Email)
+            .Number("Money", user.Money, 5)
+            .Boolean("Good", user.Good)
             .AsPatcher()
                 .DoPatch(false);
-        //await indexer.String("Name", user.Name);
-        //await indexer.String("Email", user.Email);
 
-        string url = await Database.Merge("", IndexableUserPath);
-        Console.WriteLine(url);
+        // Other user with name as "Johannn" and email as "imjohannn@hotmail.com"
+        user = new IndexableUser("Johannn", "imjohannn@hotmail.com", 10, false);
+
+        await user.Save(IndexableUserPath2);
+
+        await new Indexer().WithChunkSize(100).For(IndexableUserPath2)
+            .String("Name", user.Name)
+            .String("Email", user.Email)
+            .Number("Money", user.Money, 5)
+            .Boolean("Good", user.Good)
+            .AsPatcher()
+                .DoPatch(false);
 
         Assert.Pass();
     }
@@ -76,11 +89,17 @@ public partial class IndexableUser
 {
     public string Name;
     public string Email;
+    public int Money;
 
-    public IndexableUser(string name, string email)
+    public bool Good;
+
+    public IndexableUser(string name, string email, int money, bool good)
     {
         Name = name;
         Email = email;
+        Money = money;
+
+        Good = good;
     }
     public IndexableUser() { }
 }
