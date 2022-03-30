@@ -142,3 +142,62 @@ public struct DBPath
 
     public DBPath(string from) => Path = new StringBuilder(from);
 }
+public readonly struct ImmutableDBPath
+{
+    public readonly string Path;
+
+    public string GetCurrentPathName()
+    {
+        string cur = "";
+        int offset = 1;
+    begin:
+        if (Path[^offset] != '/')
+        {
+            cur += Path[^offset];
+            offset++;
+            goto begin;
+        }
+        return cur;
+    }
+    public string GetFirstPathName()
+    {
+        int length = Path.Length;
+        string cur = "";
+        int offset = 0;
+    begin:
+        if (offset < length && Path[offset] is char c and not '/')
+        {
+            cur += c;
+            offset++;
+            goto begin;
+        }
+        return cur;
+    }
+
+    public ImmutableDBPath MoveUp()
+    {
+        string fpath = Path;
+    begin:
+        if (fpath[^1] != '/')
+        {
+            fpath = fpath.Remove(fpath.Length - 1, 1);
+            goto begin;
+        }
+        return new ImmutableDBPath(fpath);
+    }
+
+    public ImmutableDBPath MoveDown(string to)
+    {
+        if (to.Contains('.')) throw new Exception("Cannot put any '.' in path");
+
+        return new ImmutableDBPath(Path + '/' + to);
+    }
+
+    public ImmutableDBPath Insert(int index, string content)
+    {
+        if (content.Contains('.')) throw new Exception("Cannot put any '.' in path");
+        return new ImmutableDBPath(Path.Insert(index, content));
+    }
+
+    public ImmutableDBPath(string path) => Path = path;
+}

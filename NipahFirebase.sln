@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NipahFirebase.SourceGenerat
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FirebaseSourceGeneratorTest", "FirebaseSourceGeneratorTest\FirebaseSourceGeneratorTest.csproj", "{00B379D7-C239-4370-A3C5-653C4DAA332A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NipahFirebase.Indexing", "NipahFirebase.Indexing\NipahFirebase.Indexing.csproj", "{0D28FB2A-90C3-4E8F-81A4-A780E3794FFE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{00B379D7-C239-4370-A3C5-653C4DAA332A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{00B379D7-C239-4370-A3C5-653C4DAA332A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{00B379D7-C239-4370-A3C5-653C4DAA332A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D28FB2A-90C3-4E8F-81A4-A780E3794FFE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D28FB2A-90C3-4E8F-81A4-A780E3794FFE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D28FB2A-90C3-4E8F-81A4-A780E3794FFE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D28FB2A-90C3-4E8F-81A4-A780E3794FFE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

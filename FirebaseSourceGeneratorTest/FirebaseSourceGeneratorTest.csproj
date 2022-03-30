@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FirebaseCore\NipahFirebase.FirebaseCore.csproj" />
+    <ProjectReference Include="..\NipahFirebase.Indexing\NipahFirebase.Indexing.csproj" />
     <ProjectReference Include="..\NipahFirebase.SourceGenerator\NipahFirebase.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

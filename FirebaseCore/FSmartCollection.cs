@@ -2,20 +2,20 @@
 
 public class FSmartCollection<T> : ICustomInstanceFirebaseObject, IPublicFirebaseObject
 {
-    public bool IsLoaded => throw new NotImplementedException();
+    public bool IsLoaded { get; }
 
-    public Task Delete(string path)
+    public async Task Delete(string path)
     {
-        throw new NotImplementedException();
+        
     }
 
-    public Task Load(string path)
+    public async Task Load(string path)
     {
-        throw new NotImplementedException();
+        
     }
 
-    public Task Save(string path)
+    public async Task Save(string path)
     {
-        throw new NotImplementedException();
-    }
+        
+    } 
 }
